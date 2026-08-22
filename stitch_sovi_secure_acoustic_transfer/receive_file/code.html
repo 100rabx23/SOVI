@@ -1,0 +1,230 @@
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "on-secondary-fixed": "#00210b", "surface-bright": "#353940", "surface-tint": "#3cd7ff", "surface-container-low": "#181c22", "on-primary-fixed-variant": "#004e5f", "background": "#10141a", "on-secondary-fixed-variant": "#005226", "on-tertiary-fixed": "#0b1c30", "on-error-container": "#ffdad6", "surface-dim": "#10141a", "tertiary-container": "#b3c4de", "secondary-fixed-dim": "#00e475", "secondary-fixed": "#62ff96", "on-tertiary-container": "#415167", "error-container": "#93000a", "inverse-on-surface": "#2d3137", "on-primary-container": "#00586b", "surface-container-lowest": "#0a0e14", "inverse-primary": "#00677e", "error": "#ffb4ab", "on-secondary": "#003918", "primary": "#a8e8ff", "surface-container": "#1c2026", "surface-container-high": "#262a31", "on-tertiary-fixed-variant": "#38485d", "secondary-container": "#05e777", "outline-variant": "#3c494e", "surface-container-highest": "#31353c", "primary-fixed": "#b4ebff", "tertiary": "#cfe0fa", "on-surface-variant": "#bbc9cf", "surface-variant": "#31353c", "on-primary-fixed": "#001f27", "secondary": "#7dffa2", "on-error": "#690005", "inverse-surface": "#dfe2eb", "on-tertiary": "#213145", "tertiary-fixed-dim": "#b7c8e1", "primary-fixed-dim": "#3cd7ff", "on-secondary-container": "#00622e", "on-primary": "#003642", "surface": "#10141a", "outline": "#859398", "primary-container": "#00d4ff", "on-surface": "#dfe2eb", "on-background": "#dfe2eb", "tertiary-fixed": "#d3e4fe" }, "borderRadius": { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" }, "spacing": { "container-padding": "24px", "stack-sm": "8px", "stack-md": "16px", "unit": "4px", "gutter": "16px", "stack-lg": "32px" }, "fontFamily": { "display-metrics": ["Inter"], "label-mono": ["JetBrains Mono"], "body-md": ["Inter"], "headline-lg": ["Inter"], "headline-md": ["Inter"], "label-sm": ["Inter"], "body-lg": ["Inter"] }, "fontSize": { "display-metrics": ["48px", { "lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700" }], "label-mono": ["14px", { "lineHeight": "20px", "letterSpacing": "0.05em", "fontWeight": "500" }], "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }], "headline-lg": ["32px", { "lineHeight": "40px", "fontWeight": "600" }], "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "600" }], "label-sm": ["12px", { "lineHeight": "16px", "fontWeight": "600" }], "body-lg": ["18px", { "lineHeight": "28px", "fontWeight": "400" }] } } } }</script><style>@layer base { body { -webkit-tap-highlight-color: transparent; overscroll-behavior-y: contain; } .pt-safe { padding-top: env(safe-area-inset-top); } .pb-safe { padding-bottom: env(safe-area-inset-bottom); } .glass-panel { background: rgba(28, 32, 38, 0.7); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); } } .active-glow { text-shadow: 0 0 12px rgba(60, 215, 255, 0.4); }</style></head><body class="bg-surface text-on-surface font-body-md"><header class="fixed top-0 w-full z-50 pt-safe glass-panel shadow-[0_1px_8px_rgba(0,0,0,0.1)]"><div class="h-16 px-gutter flex items-center justify-between"><div class="flex items-center gap-stack-sm"><img alt="Logo" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB39Z--oKGF6bWXI6FL2Z3qzEsySXG8uLX_ADU92pf_1vRSByFaMhWaoA1BwJrCaSIe-Dv0skUMvwawONCUvBPBRKjlLqMwMdyt729IjQ_Ephuy5td-BJjG4UFl5Cv-ksMN3EZfTBjj01Yu4tQV6WmR7sULeXZa9cfdStDMAGHsGROZn6EPLj7l5S8y9B2S7qfT367G-jcMHHTJ8l9u6-5__BptDYNKjzzaliXtKx6apfWC3P7gmCVr"/><span class="font-headline-md text-headline-md text-on-surface tracking-tight uppercase">SOVI</span></div><div class="flex items-center gap-stack-sm bg-surface-container-highest/50 px-3 py-1.5 rounded-full border border-outline/10"><div class="w-2 h-2 rounded-full bg-secondary-container animate-pulse shadow-[0_0_8px_#05e777]"></div><span class="font-label-mono text-label-sm text-secondary-container">ENGINE: READY</span><div class="w-8 h-8 ml-2 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex flex-col min-h-screen pt-16 pb-20 bg-surface"><div class="flex flex-col w-full h-full relative overflow-hidden bg-background">
+<!-- Dynamic Ambient Background -->
+<div class="absolute inset-0 pointer-events-none opacity-20">
+<svg class="w-full h-full" preserveaspectratio="none">
+<defs>
+<radialgradient cx="50%" cy="50%" id="glow" r="50%">
+<stop offset="0%" stop-color="#3cd7ff" stop-opacity="0.15"></stop>
+<stop offset="100%" stop-color="#3cd7ff" stop-opacity="0"></stop>
+</radialgradient>
+</defs>
+<circle class="animate-[pulse_4s_ease-in-out_infinite]" cx="50%" cy="50%" fill="url(#glow)" r="80%"></circle>
+</svg>
+</div>
+<div class="flex-1 flex flex-col p-container-padding z-10">
+<!-- Header Section -->
+<div class="mb-stack-lg text-center mt-4">
+<h1 class="font-headline-lg text-headline-lg text-on-surface mb-stack-sm tracking-tight">Receive File</h1>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-xs mx-auto">Keep this screen open while the sender transmits.</p>
+</div>
+<!-- Central Visualization Area -->
+<div class="relative flex-1 flex flex-col items-center justify-center min-h-[320px] mb-stack-lg">
+<!-- Listening State Container -->
+<div class="relative flex flex-col items-center justify-center w-full h-full" id="listening-state">
+<!-- Animated Rings -->
+<div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+<div class="absolute w-24 h-24 rounded-full border border-primary/20 opacity-0 transition-all duration-1000" id="ring-1"></div>
+<div class="absolute w-40 h-40 rounded-full border border-primary/10 opacity-0 transition-all duration-1000 delay-300" id="ring-2"></div>
+<div class="absolute w-56 h-56 rounded-full border border-primary/5 opacity-0 transition-all duration-1000 delay-500" id="ring-3"></div>
+</div>
+<!-- Central Microphone Button / Indicator -->
+<button class="relative z-10 w-24 h-24 rounded-full bg-surface-container-high border border-outline/20 flex items-center justify-center shadow-lg transition-all duration-300 hover:scale-105 active:scale-95 group" id="btn-listen">
+<div class="absolute inset-0 rounded-full bg-primary opacity-0 group-hover:opacity-10 transition-opacity duration-300"></div>
+<span class="material-symbols-outlined text-display-metrics text-on-surface-variant transition-colors duration-300 group-hover:text-primary">mic</span>
+</button>
+<div class="mt-stack-md flex flex-col items-center gap-2">
+<div class="flex items-center gap-2 bg-surface-container/50 px-3 py-1 rounded-full border border-outline/10">
+<div class="w-2 h-2 rounded-full bg-outline-variant transition-colors duration-300" id="status-dot"></div>
+<span class="font-label-mono text-label-sm text-on-surface-variant transition-colors duration-300" id="status-text">SYSTEM IDLE</span>
+</div>
+<!-- Signal Detected Alert (Initially Hidden) -->
+<div class="hidden mt-2 flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 border border-primary/30 active-glow" id="signal-alert">
+<span class="material-symbols-outlined text-[16px] text-primary">sensors</span>
+<span class="font-label-mono text-label-sm text-primary">SOVI SIGNAL DETECTED</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Live Data Readout Cards -->
+<div class="grid grid-cols-2 gap-gutter mb-stack-lg">
+<div class="bg-surface-container-low rounded-xl p-4 border border-outline/10 glass-panel">
+<div class="font-label-mono text-label-sm text-on-surface-variant mb-1">MIC LEVEL</div>
+<div class="flex items-baseline gap-1">
+<div class="font-display-metrics text-headline-md text-on-surface" id="data-mic">Low</div>
+</div>
+</div>
+<div class="bg-surface-container-low rounded-xl p-4 border border-outline/10 glass-panel">
+<div class="font-label-mono text-label-sm text-on-surface-variant mb-1">DETECTED FREQ</div>
+<div class="flex items-baseline gap-1">
+<div class="font-display-metrics text-headline-md text-on-surface" id="data-freq">---</div>
+<span class="font-label-mono text-label-sm text-on-surface-variant">kHz</span>
+</div>
+</div>
+<div class="bg-surface-container-low rounded-xl p-4 border border-outline/10 glass-panel">
+<div class="font-label-mono text-label-sm text-on-surface-variant mb-1">SIGNAL QUALITY</div>
+<div class="flex items-center gap-2">
+<div class="flex-1 h-1.5 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary w-0 transition-all duration-300" id="quality-bar"></div>
+</div>
+<span class="font-label-mono text-label-sm text-on-surface" id="data-quality">---</span>
+</div>
+</div>
+<div class="bg-surface-container-low rounded-xl p-4 border border-outline/10 glass-panel">
+<div class="font-label-mono text-label-sm text-on-surface-variant mb-1">CONNECTION</div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant" id="conn-icon">sync</span>
+<div class="font-display-metrics text-body-lg text-on-surface" id="data-conn">Waiting</div>
+</div>
+</div>
+</div>
+<!-- Action Area -->
+<div class="mt-auto">
+<button class="w-full h-14 rounded-xl bg-primary text-on-primary font-label-mono text-[16px] font-bold tracking-wider hover:bg-primary-fixed active:bg-primary-fixed-dim transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(168,232,255,0.15)]" id="btn-action">
+<span class="material-symbols-outlined text-[20px]">play_arrow</span>
+<span id="btn-action-text">START LISTENING</span>
+</button>
+</div>
+</div>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const btnListen = document.getElementById('btn-listen');
+      const btnAction = document.getElementById('btn-action');
+      const btnActionText = document.getElementById('btn-action-text');
+      const actionIcon = btnAction.querySelector('.material-symbols-outlined');
+      const statusText = document.getElementById('status-text');
+      const statusDot = document.getElementById('status-dot');
+      const ring1 = document.getElementById('ring-1');
+      const ring2 = document.getElementById('ring-2');
+      const ring3 = document.getElementById('ring-3');
+      const micIcon = btnListen.querySelector('.material-symbols-outlined');
+      const signalAlert = document.getElementById('signal-alert');
+      
+      // Data Readouts
+      const dataMic = document.getElementById('data-mic');
+      const dataFreq = document.getElementById('data-freq');
+      const dataQuality = document.getElementById('data-quality');
+      const qualityBar = document.getElementById('quality-bar');
+      const dataConn = document.getElementById('data-conn');
+      const connIcon = document.getElementById('conn-icon');
+
+      let isListening = false;
+      let simulateInterval;
+
+      function toggleListening() {
+        isListening = !isListening;
+
+        if (isListening) {
+          // UI State: Listening
+          btnActionText.textContent = 'STOP LISTENING';
+          actionIcon.textContent = 'stop';
+          btnAction.classList.replace('bg-primary', 'bg-surface-container-highest');
+          btnAction.classList.replace('text-on-primary', 'text-on-surface');
+          
+          btnListen.classList.replace('bg-surface-container-high', 'bg-primary/20');
+          btnListen.classList.add('border-primary/50', 'shadow-[0_0_30px_rgba(60,215,255,0.3)]');
+          micIcon.classList.replace('text-on-surface-variant', 'text-primary');
+          
+          statusText.textContent = 'LISTENING...';
+          statusText.classList.replace('text-on-surface-variant', 'text-primary');
+          statusDot.classList.replace('bg-outline-variant', 'bg-primary');
+          statusDot.classList.add('animate-pulse');
+
+          // Animation
+          ring1.classList.remove('opacity-0', 'w-24', 'h-24');
+          ring1.classList.add('animate-[ping_3s_ease-out_infinite]', 'w-32', 'h-32', 'opacity-100');
+          ring2.classList.remove('opacity-0', 'w-40', 'h-40');
+          ring2.classList.add('animate-[ping_4s_ease-out_infinite]', 'w-48', 'h-48', 'opacity-80');
+          ring3.classList.remove('opacity-0', 'w-56', 'h-56');
+          ring3.classList.add('animate-[ping_5s_ease-out_infinite]', 'w-64', 'h-64', 'opacity-60');
+
+          dataConn.textContent = 'Scanning';
+          connIcon.classList.add('animate-spin');
+
+          startSimulation();
+
+        } else {
+          // UI State: Idle
+          btnActionText.textContent = 'START LISTENING';
+          actionIcon.textContent = 'play_arrow';
+          btnAction.classList.replace('bg-surface-container-highest', 'bg-primary');
+          btnAction.classList.replace('text-on-surface', 'text-on-primary');
+
+          btnListen.classList.replace('bg-primary/20', 'bg-surface-container-high');
+          btnListen.classList.remove('border-primary/50', 'shadow-[0_0_30px_rgba(60,215,255,0.3)]');
+          micIcon.classList.replace('text-primary', 'text-on-surface-variant');
+
+          statusText.textContent = 'SYSTEM IDLE';
+          statusText.classList.replace('text-primary', 'text-on-surface-variant');
+          statusDot.classList.replace('bg-primary', 'bg-outline-variant');
+          statusDot.classList.remove('animate-pulse');
+
+          // Reset Animation
+          ring1.className = 'absolute w-24 h-24 rounded-full border border-primary/20 opacity-0 transition-all duration-1000';
+          ring2.className = 'absolute w-40 h-40 rounded-full border border-primary/10 opacity-0 transition-all duration-1000 delay-300';
+          ring3.className = 'absolute w-56 h-56 rounded-full border border-primary/5 opacity-0 transition-all duration-1000 delay-500';
+
+          signalAlert.classList.add('hidden');
+          
+          // Reset Data
+          dataMic.textContent = 'Low';
+          dataFreq.textContent = '---';
+          dataQuality.textContent = '---';
+          qualityBar.style.width = '0%';
+          dataConn.textContent = 'Waiting';
+          connIcon.classList.remove('animate-spin');
+          connIcon.textContent = 'sync';
+          
+          stopSimulation();
+        }
+      }
+
+      function startSimulation() {
+        let ticks = 0;
+        simulateInterval = setInterval(() => {
+          ticks++;
+          
+          // Simulate ambient noise initially
+          if (ticks < 15) {
+             dataMic.textContent = ['Low', 'Med', 'Low'][ticks % 3];
+             dataFreq.textContent = (Math.random() * 2 + 18).toFixed(1);
+             dataQuality.textContent = 'Poor';
+             qualityBar.style.width = '10%';
+          } 
+          // Simulate detection
+          else if (ticks === 15) {
+            signalAlert.classList.remove('hidden');
+            signalAlert.classList.add('animate-[bounce_0.5s_ease-in-out_2]');
+            dataConn.textContent = 'Handshake';
+            connIcon.classList.remove('animate-spin');
+            connIcon.textContent = 'link';
+          }
+          // Simulate active connection
+          else if (ticks > 15) {
+             dataMic.textContent = 'High';
+             dataFreq.textContent = (19.2 + Math.random() * 0.1).toFixed(2);
+             
+             const qual = Math.floor(Math.random() * 20 + 80);
+             dataQuality.textContent = qual + '%';
+             qualityBar.style.width = qual + '%';
+             
+             if(qual > 90) {
+               qualityBar.classList.replace('bg-primary', 'bg-secondary');
+             } else {
+               qualityBar.classList.replace('bg-secondary', 'bg-primary');
+             }
+             dataConn.textContent = 'Receiving';
+          }
+
+        }, 500);
+      }
+
+      function stopSimulation() {
+        clearInterval(simulateInterval);
+      }
+
+      btnListen.addEventListener('click', toggleListening);
+      btnAction.addEventListener('click', toggleListening);
+    });
+  </script>
+</div></main><nav class="fixed bottom-0 w-full z-50 pb-safe glass-panel" data-active-classes="text-primary active-glow"><div class="flex justify-between items-center h-16 px-4"><a class="flex flex-col items-center justify-center gap-0.5 min-w-[64px] text-on-surface-variant hover:text-on-surface transition-colors" data-path="home" href="#"><span class="material-symbols-outlined">home</span><span class="font-label-sm text-label-sm">Home</span></a><a class="flex flex-col items-center justify-center gap-0.5 min-w-[64px] text-on-surface-variant hover:text-on-surface transition-colors" data-path="send" href="#"><span class="material-symbols-outlined">upload</span><span class="font-label-sm text-label-sm">Send</span></a><a aria-current="page" class="flex flex-col items-center justify-center gap-0.5 min-w-[64px] transition-colors text-primary active-glow" data-path="receive" href="#"><span class="material-symbols-outlined">download</span><span class="font-label-sm text-label-sm">Receive</span></a><a class="flex flex-col items-center justify-center gap-0.5 min-w-[64px] text-on-surface-variant hover:text-on-surface transition-colors" data-path="history" href="#"><span class="material-symbols-outlined">history</span><span class="font-label-sm text-label-sm">History</span></a><a class="flex flex-col items-center justify-center gap-0.5 min-w-[64px] text-on-surface-variant hover:text-on-surface transition-colors" data-path="settings" href="#"><span class="material-symbols-outlined">settings</span><span class="font-label-sm text-label-sm">Settings</span></a></div></nav></body></html>
