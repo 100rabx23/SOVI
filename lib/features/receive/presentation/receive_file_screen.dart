@@ -9,6 +9,8 @@ import '../../../services/acoustic/fsk_modem.dart';
 import '../../../services/audio/audio_io_service.dart';
 import '../../../services/audio/native_audio_service.dart';
 import '../../../services/protocol/sovi_protocol.dart';
+import '../../../services/device/device_info_service.dart';
+import '../../../services/acoustic/receiver_discovery_engine.dart';
 
 class ReceiveFileScreen extends StatefulWidget {
   final VoidCallback onSignalDetected;
@@ -37,8 +39,11 @@ class _ReceiveFileScreenState extends State<ReceiveFileScreen>
     );
   }
 
+  final ReceiverBeaconBroadcaster _broadcaster = ReceiverBeaconBroadcaster();
+
   @override
   void dispose() {
+    _broadcaster.stopBroadcasting();
     _pcmSub?.cancel();
     _rmsSub?.cancel();
     _rippleController.dispose();
@@ -61,6 +66,7 @@ class _ReceiveFileScreenState extends State<ReceiveFileScreen>
       }
 
       await NativeAudioService().startRecording();
+      _broadcaster.startBroadcasting();
 
       _rmsSub = NativeAudioService().rmsStream.listen((db) {
         if (mounted) {
@@ -68,6 +74,7 @@ class _ReceiveFileScreenState extends State<ReceiveFileScreen>
         }
       });
 
+      final rxBuffer = AcousticReceiverBuffer();
       _pcmSub = NativeAudioService().pcmStream.listen((pcmChunk) async {
         if (pcmChunk.length >= 2 && !_signalDetected) {
           final floatSamples = Float32List(pcmChunk.length ~/ 2);
@@ -76,10 +83,19 @@ class _ReceiveFileScreenState extends State<ReceiveFileScreen>
             floatSamples[i] = bd.getInt16(i * 2, Endian.little) / 32768.0;
           }
 
-          final packet = FskModem.tryDecodeFromAudio(floatSamples);
+          rxBuffer.appendSamples(floatSamples);
+          final packet = rxBuffer.tryExtractPacket();
           if (packet != null && packet.type == PacketType.hello) {
+            final targetId = SoviPacket.extractTargetDeviceId(packet);
+            final myId = DeviceInfoService.deviceId;
+
+            if (targetId != null && targetId != myId && targetId != '*') {
+              ProtocolEventLogger.log('[PHONE B] HELLO_IGNORED target=$targetId myId=$myId');
+              return;
+            }
+
             _signalDetected = true;
-            ProtocolEventLogger.log('[PHONE B] HELLO_RX seq=${packet.sequenceNumber}');
+            ProtocolEventLogger.log('[PHONE B] HELLO_RX_TARGET_MATCH target=$myId seq=${packet.sequenceNumber}');
 
             // EMIT REAL PHYSICAL 2-FSK ACK OVER PHONE B SPEAKER BACK TO PHONE A
             final ackPacket = SoviPacket.createAck(0);
@@ -101,6 +117,7 @@ class _ReceiveFileScreenState extends State<ReceiveFileScreen>
         _rippleController.repeat();
       });
     } else {
+      _broadcaster.stopBroadcasting();
       await NativeAudioService().stopRecording();
       _pcmSub?.cancel();
       _rmsSub?.cancel();

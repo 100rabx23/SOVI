@@ -81,8 +81,7 @@ class FskModem {
     var q2 = 0.0;
 
     for (var i = 0; i < n; i++) {
-      final window = 0.5 * (1 - cos(2 * pi * i / n));
-      final sample = block[i] * window;
+      final sample = block[i];
       q0 = coeff * q1 - q2 + sample;
       q2 = q1;
       q1 = q0;
@@ -124,9 +123,27 @@ class FskModem {
         }
       }
 
-      // If at least 14 out of 16 preamble bits match (87.5% confidence)
       if (matches >= 14) {
-        final payloadStart = start + preambleSamples;
+        var bestStart = start;
+        var maxMatches = matches;
+        final searchMin = max(0, start - samplesPerSymbol);
+        final searchMax = min(audio.length - preambleSamples, start + samplesPerSymbol);
+
+        for (var s = searchMin; s <= searchMax; s += 2) {
+          var m = 0;
+          for (var i = 0; i < SoviPacket.preambleBits.length; i++) {
+            final blockStart = s + (i * samplesPerSymbol);
+            final blockEnd = min(blockStart + samplesPerSymbol, audio.length);
+            final block = Float32List.sublistView(audio, blockStart, blockEnd);
+            if (detectSymbol(block) == SoviPacket.preambleBits[i]) m++;
+          }
+          if (m > maxMatches) {
+            maxMatches = m;
+            bestStart = s;
+          }
+        }
+
+        final payloadStart = bestStart + preambleSamples;
         final decodedBits = <int>[];
 
         for (var pos = payloadStart; pos + samplesPerSymbol <= audio.length; pos += samplesPerSymbol) {
@@ -188,3 +205,110 @@ class FskModem {
     );
   }
 }
+
+/// Persistent Rolling PCM Receiver Buffer that accumulates incoming AudioRecord chunks
+/// and decodes preambles that cross buffer boundaries.
+class AcousticReceiverBuffer {
+  final List<double> _buffer = [];
+  static const int maxBufferSize = 44100 * 10; // 10 seconds of audio
+
+  void appendSamples(Float32List newSamples) {
+    _buffer.addAll(newSamples);
+    if (_buffer.length > maxBufferSize) {
+      _buffer.removeRange(0, _buffer.length - (44100 * 4));
+    }
+  }
+
+  void clear() {
+    _buffer.clear();
+  }
+
+  int get length => _buffer.length;
+
+  /// Scan rolling buffer for preamble and return decoded SoviPacket when a valid packet passes CRC32
+  SoviPacket? tryExtractPacket() {
+    if (_buffer.length < 500) return null;
+
+    final floatAudio = Float32List.fromList(_buffer);
+    final samplesPerSymbol = (FskModem.sampleRate * FskModem.symbolTime).round();
+    final preambleSamples = SoviPacket.preambleBits.length * samplesPerSymbol;
+
+    if (floatAudio.length < preambleSamples) return null;
+
+    for (var start = 0; start <= floatAudio.length - preambleSamples; start += samplesPerSymbol ~/ 4) {
+      var matches = 0;
+      for (var i = 0; i < SoviPacket.preambleBits.length; i++) {
+        final blockStart = start + (i * samplesPerSymbol);
+        final blockEnd = min(blockStart + samplesPerSymbol, floatAudio.length);
+        final block = Float32List.sublistView(floatAudio, blockStart, blockEnd);
+
+        final bit = FskModem.detectSymbol(block);
+        if (bit == SoviPacket.preambleBits[i]) {
+          matches++;
+        }
+      }
+
+      if (matches >= 14) {
+        var bestStart = start;
+        var maxMatches = matches;
+        final searchMin = max(0, start - samplesPerSymbol);
+        final searchMax = min(floatAudio.length - preambleSamples, start + samplesPerSymbol);
+
+        for (var s = searchMin; s <= searchMax; s += 2) {
+          var m = 0;
+          for (var i = 0; i < SoviPacket.preambleBits.length; i++) {
+            final blockStart = s + (i * samplesPerSymbol);
+            final blockEnd = min(blockStart + samplesPerSymbol, floatAudio.length);
+            final block = Float32List.sublistView(floatAudio, blockStart, blockEnd);
+            if (FskModem.detectSymbol(block) == SoviPacket.preambleBits[i]) m++;
+          }
+          if (m > maxMatches) {
+            maxMatches = m;
+            bestStart = s;
+          }
+        }
+
+        final payloadStart = bestStart + preambleSamples;
+        final decodedBits = <int>[];
+
+        for (var pos = payloadStart; pos + samplesPerSymbol <= floatAudio.length; pos += samplesPerSymbol) {
+          final block = Float32List.sublistView(floatAudio, pos, pos + samplesPerSymbol);
+          final bit = FskModem.detectSymbol(block) ?? 0;
+          decodedBits.add(bit);
+
+          if (decodedBits.length >= 128 && decodedBits.length % 8 == 0) {
+            try {
+              final bytes = SoviPacket.bitsToBytes(decodedBits);
+              final packet = SoviPacket.decode(bytes);
+              final consumedIndex = payloadStart + (decodedBits.length * samplesPerSymbol);
+              if (consumedIndex < _buffer.length) {
+                _buffer.removeRange(0, consumedIndex);
+              } else {
+                _buffer.clear();
+              }
+              return packet;
+            } catch (_) {}
+          }
+        }
+
+        if (decodedBits.length >= 128) {
+          final fullBitsCount = (decodedBits.length ~/ 8) * 8;
+          try {
+            final bytes = SoviPacket.bitsToBytes(decodedBits.sublist(0, fullBitsCount));
+            final packet = SoviPacket.decode(bytes);
+            final consumedIndex = payloadStart + (fullBitsCount * samplesPerSymbol);
+            if (consumedIndex < _buffer.length) {
+              _buffer.removeRange(0, consumedIndex);
+            } else {
+              _buffer.clear();
+            }
+            return packet;
+          } catch (_) {}
+        }
+      }
+    }
+
+    return null;
+  }
+}
+

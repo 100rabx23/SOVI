@@ -3,7 +3,65 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
-enum PacketType { hello, meta, data, ack, nack, end, error }
+enum PacketType { hello, meta, data, ack, nack, end, error, discoveryBeacon }
+
+class SoviDiscoveryBeacon {
+  final String deviceId;
+  final String displayName;
+  final String status;
+  final int protocolVersion;
+  final String sessionNonce;
+  final double? measuredRmsDb;
+
+  SoviDiscoveryBeacon({
+    required this.deviceId,
+    required this.displayName,
+    this.status = 'READY',
+    this.protocolVersion = 1,
+    this.sessionNonce = '0000',
+    this.measuredRmsDb,
+  });
+
+  Uint8List encode() {
+    final map = {
+      'deviceId': deviceId,
+      'displayName': displayName,
+      'status': status,
+      'version': protocolVersion,
+      'nonce': sessionNonce,
+    };
+    return Uint8List.fromList(utf8.encode(jsonEncode(map)));
+  }
+
+  static SoviDiscoveryBeacon decode(Uint8List bytes, {double? rmsDb}) {
+    try {
+      final str = utf8.decode(bytes);
+      final map = jsonDecode(str) as Map<String, dynamic>;
+      return SoviDiscoveryBeacon(
+        deviceId: map['deviceId'] as String? ?? 'SOVI-7A3F92',
+        displayName: map['displayName'] as String? ?? 'SOVI Device',
+        status: map['status'] as String? ?? 'READY',
+        protocolVersion: map['version'] as int? ?? 1,
+        sessionNonce: map['nonce'] as String? ?? '0000',
+        measuredRmsDb: rmsDb,
+      );
+    } catch (_) {
+      return SoviDiscoveryBeacon(
+        deviceId: 'SOVI-UNKNOWN',
+        displayName: 'Nearby Device',
+        status: 'READY',
+        measuredRmsDb: rmsDb,
+      );
+    }
+  }
+
+  String get signalQuality {
+    if (measuredRmsDb == null) return 'Good';
+    if (measuredRmsDb! > -35.0) return 'Strong';
+    if (measuredRmsDb! > -55.0) return 'Good';
+    return 'Weak';
+  }
+}
 
 enum TransferStatus {
   idle,
@@ -146,12 +204,33 @@ class SoviPacket {
     1, 1, 1, 0
   ];
 
-  static SoviPacket createHello({int sequenceNumber = 0}) {
+  static SoviPacket createHello({String? targetDeviceId, int sequenceNumber = 0}) {
+    final payloadMap = targetDeviceId != null ? {'targetDeviceId': targetDeviceId} : <String, dynamic>{};
+    final payloadBytes = Uint8List.fromList(utf8.encode(jsonEncode(payloadMap)));
     return SoviPacket(
       type: PacketType.hello,
       sequenceNumber: sequenceNumber,
-      payload: Uint8List(0),
+      payload: payloadBytes,
     );
+  }
+
+  static SoviPacket createBeacon(SoviDiscoveryBeacon beacon) {
+    return SoviPacket(
+      type: PacketType.discoveryBeacon,
+      sequenceNumber: 0,
+      payload: beacon.encode(),
+    );
+  }
+
+  static String? extractTargetDeviceId(SoviPacket packet) {
+    if (packet.type != PacketType.hello || packet.payload.isEmpty) return null;
+    try {
+      final str = utf8.decode(packet.payload);
+      final map = jsonDecode(str) as Map<String, dynamic>;
+      return map['targetDeviceId'] as String?;
+    } catch (_) {
+      return null;
+    }
   }
 
   static SoviPacket createMeta(SoviSessionMeta meta) {
@@ -259,8 +338,10 @@ class SoviPacket {
       );
     }
 
-    final body = data.sublist(0, 12 + payloadLen);
-    final receivedCrc = bd.getUint32(12 + payloadLen, Endian.big);
+    final exactData = data.sublist(0, expectedTotal);
+    final exactBd = ByteData.sublistView(exactData);
+    final body = exactData.sublist(0, 12 + payloadLen);
+    final receivedCrc = exactBd.getUint32(12 + payloadLen, Endian.big);
     final calculatedCrc = calculateCrc32(body);
 
     if (receivedCrc != calculatedCrc) {
@@ -271,7 +352,7 @@ class SoviPacket {
       );
     }
 
-    final payload = data.sublist(12, 12 + payloadLen);
+    final payload = exactData.sublist(12, 12 + payloadLen);
     return SoviPacket(
       type: type,
       sequenceNumber: seq,
@@ -391,6 +472,13 @@ class ProtocolStateMachine {
 
       case PacketType.data:
         status = TransferStatus.transferring;
+        // Check if this packet was already received (duplicate retransmission)
+        final alreadyExists = receivedPackets.any((p) => p.sequenceNumber == packet.sequenceNumber);
+        if (alreadyExists) {
+          ProtocolEventLogger.log('DATA #${packet.sequenceNumber} DUPLICATE RECEIVED — RE-TRANSMITTING ACK #${packet.sequenceNumber}');
+          return SoviPacket.createAck(packet.sequenceNumber);
+        }
+
         if (packet.sequenceNumber == currentSequence) {
           receivedPackets.add(packet);
           final ackSeq = currentSequence;
@@ -398,6 +486,10 @@ class ProtocolStateMachine {
           ProtocolEventLogger.log('DATA #${packet.sequenceNumber} RECEIVED & VERIFIED');
           ProtocolEventLogger.log('TRANSMITTING ACK #$ackSeq');
           return SoviPacket.createAck(ackSeq);
+        } else if (packet.sequenceNumber < currentSequence) {
+          // Received earlier sequence that wasn't in list (edge case)
+          ProtocolEventLogger.log('DATA #${packet.sequenceNumber} RE-TRANSMITTING ACK #${packet.sequenceNumber}');
+          return SoviPacket.createAck(packet.sequenceNumber);
         } else {
           retryCount++;
           ProtocolEventLogger.log('DATA #${packet.sequenceNumber} OUT OF ORDER (EXPECTED #$currentSequence)', isError: true);

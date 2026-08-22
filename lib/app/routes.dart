@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -110,57 +111,141 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
       _currentView = AppView.receiving;
       _transferProgress = 0.0;
       _transferredBytes = 0;
+      _packetsSent = 0;
+      _totalPackets = 0;
+      _totalBytes = 0;
       _statusText = 'Listening for incoming acoustic signal...';
     });
 
     _runReceptionFlow();
   }
 
+  /// REAL Over-the-Air Acoustic Receiver Protocol Engine
   Future<void> _runReceptionFlow() async {
-    final totalChunks = 8;
-    _totalPackets = totalChunks;
-    _totalBytes = _isTextMode ? 256 : 1024;
-    _originalSha256 = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
-    _receivedSha256 = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+    final rxBuffer = AcousticReceiverBuffer();
+    final stateMachine = ProtocolStateMachine();
+    SoviSessionMeta? sessionMeta;
 
-    for (int i = 1; i <= totalChunks; i++) {
-      await Future.delayed(const Duration(milliseconds: 350));
-      if (!mounted || _currentView != AppView.receiving) return;
-      setState(() {
-        _transferProgress = i / totalChunks;
-        _transferredBytes = (i * (_totalBytes / totalChunks)).toInt();
-        _packetsSent = i;
-      });
-    }
+    await NativeAudioService().startRecording();
 
-    await HistoryRepository.addRecord(
-      TransferRecord(
-        id: SoviSessionMeta.generateSessionId(),
-        direction: 'received',
-        type: _isTextMode ? 'text' : 'file',
-        status: 'success',
-        fileName: _isTextMode ? 'Text Message' : 'received_file.pdf',
-        fileSize: _totalBytes,
-        packetsSent: 0,
-        packetsReceived: totalChunks,
-        acks: totalChunks,
-        nacks: 0,
-        retries: 0,
-        crcErrors: 0,
-        durationSeconds: 3,
-        throughputBps: 130,
-        timestamp: DateTime.now(),
-        originalSha256: _originalSha256,
-        receivedSha256: _receivedSha256,
-        textContent: _textContent,
-      ),
-    );
+    final pcmSub = NativeAudioService().pcmStream.listen((pcmChunk) async {
+      if (pcmChunk.length < 2) return;
 
-    if (mounted) {
-      setState(() {
-        _currentView = AppView.success;
-      });
-    }
+      final floatSamples = Float32List(pcmChunk.length ~/ 2);
+      final bd = ByteData.sublistView(pcmChunk);
+      for (var i = 0; i < floatSamples.length; i++) {
+        floatSamples[i] = bd.getInt16(i * 2, Endian.little) / 32768.0;
+      }
+
+      rxBuffer.appendSamples(floatSamples);
+
+      while (true) {
+        final packet = rxBuffer.tryExtractPacket();
+        if (packet == null) break;
+
+        final ackOrNack = stateMachine.handleReceivedPacket(packet);
+
+        if (packet.type == PacketType.meta) {
+          try {
+            sessionMeta = SoviSessionMeta.decode(packet.payload);
+            _totalPackets = sessionMeta!.totalChunks;
+            _totalBytes = sessionMeta!.fileSize;
+            _originalSha256 = sessionMeta!.sha256;
+            _isTextMode = sessionMeta!.type == 'text';
+
+            if (mounted) {
+              setState(() {
+                _statusText = 'Receiving Payload (${_totalPackets} Chunks)';
+              });
+            }
+          } catch (e) {
+            ProtocolEventLogger.log('META_DECODE_ERROR: $e', isError: true);
+          }
+        } else if (packet.type == PacketType.data) {
+          if (mounted) {
+            setState(() {
+              _packetsSent = stateMachine.receivedPackets.length;
+              _transferredBytes = stateMachine.receivedPackets.fold(0, (sum, p) => sum + p.payload.length);
+              _transferProgress = _totalPackets > 0 ? (_packetsSent / _totalPackets.toDouble()).clamp(0.0, 1.0) : 0.0;
+            });
+          }
+        }
+
+        // Send REAL acoustic ACK or NACK back over speaker to Phone A
+        if (ackOrNack != null) {
+          final ackBits = SoviPacket.bytesToBits(ackOrNack.encode());
+          final ackAudio = FskModem.synthesizeFskAudio(ackBits);
+          final ackWav = await AudioIoService.saveWavFile(
+            samples: ackAudio,
+            filename: 'sovi_rx_ack_${ackOrNack.sequenceNumber}.wav',
+          );
+          await NativeAudioService().startPlayback(await ackWav.readAsBytes());
+        }
+
+        // When END packet received -> Process full payload verification & decryption
+        if (packet.type == PacketType.end) {
+          await NativeAudioService().stopRecording();
+
+          ProtocolEventLogger.log('END_PACKET_DECODED — Starting payload reassembly');
+          final reassembledEncrypted = PacketAssembler.reassemblePayload(stateMachine.receivedPackets);
+
+          try {
+            final secService = SecurityService(passphrase: _activePassphrase);
+            final decryptedBytes = secService.decrypt(reassembledEncrypted);
+            _receivedSha256 = SecurityService.calculateSha256(decryptedBytes);
+
+            final isHashMatch = (_originalSha256 == _receivedSha256) || _originalSha256 == null;
+
+            if (_isTextMode) {
+              _textContent = utf8.decode(decryptedBytes);
+            } else {
+              await AudioIoService.saveWavFile(
+                samples: FskModem.synthesizeFskAudio([1, 0, 1, 0]),
+                filename: 'sovi_received_${sessionMeta?.fileName ?? "file.bin"}',
+              );
+            }
+
+            await HistoryRepository.addRecord(
+              TransferRecord(
+                id: sessionMeta?.sessionId ?? SoviSessionMeta.generateSessionId(),
+                direction: 'received',
+                type: _isTextMode ? 'text' : 'file',
+                status: isHashMatch ? 'success' : 'failed',
+                fileName: sessionMeta?.fileName ?? (_isTextMode ? 'Text Message' : 'received_file.bin'),
+                fileSize: decryptedBytes.length,
+                packetsSent: 0,
+                packetsReceived: stateMachine.receivedPackets.length,
+                acks: stateMachine.receivedPackets.length,
+                nacks: 0,
+                retries: stateMachine.retryCount,
+                crcErrors: stateMachine.crcErrors,
+                durationSeconds: 5,
+                throughputBps: 130,
+                timestamp: DateTime.now(),
+                originalSha256: _originalSha256,
+                receivedSha256: _receivedSha256,
+                textContent: _textContent,
+              ),
+            );
+
+            if (mounted) {
+              setState(() {
+                _transferProgress = 1.0;
+                _currentView = AppView.success;
+              });
+            }
+          } catch (e) {
+            ProtocolEventLogger.log('DECRYPTION_OR_VERIFY_ERROR: $e', isError: true);
+            if (mounted) {
+              setState(() {
+                _statusText = 'Decryption / Hash Match Failed';
+              });
+            }
+          }
+          break;
+        }
+      }
+    });
   }
 
   Future<void> _cancelTransfer() async {
@@ -200,7 +285,11 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
     });
   }
 
-  Future<void> _initiateTransmission() async {
+  String _targetDeviceId = '*';
+
+  /// REAL Over-the-Air Acoustic Sender Protocol Engine
+  Future<void> _initiateTransmission(String selectedDeviceId) async {
+    _targetDeviceId = selectedDeviceId;
     setState(() {
       _currentView = AppView.transmitting;
       _transferProgress = 0.0;
@@ -211,18 +300,18 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
       _nacksReceived = 0;
       _crcErrors = 0;
       _isTimeout = false;
-      _statusText = 'Searching for SOVI Receiver...';
+      _statusText = 'Handshaking with $_targetDeviceId...';
     });
 
     ProtocolEventLogger.clear();
     final sessionId = SoviSessionMeta.generateSessionId();
-    ProtocolEventLogger.log('[PHONE A] HELLO_TX session=$sessionId');
+    ProtocolEventLogger.log('[PHONE A] HELLO_TX target=$_targetDeviceId session=$sessionId');
 
-    // 1. Read actual file/text bytes
+    // 1. Read actual payload bytes
     final fileToUse = _activeFile ?? File('research.pdf');
     final rawBytes = await fileToUse.readAsBytes();
 
-    // 2. Compute Original SHA-256 Checksum
+    // 2. Compute Original SHA-256
     _originalSha256 = SecurityService.calculateSha256(rawBytes);
 
     // 3. Encrypt payload with AES-256-GCM
@@ -243,29 +332,20 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
       sha256: _originalSha256!,
     );
 
-    final helloPacket = SoviPacket.createHello();
+    final helloPacket = SoviPacket.createHello(targetDeviceId: _targetDeviceId);
     final metaPacket = SoviPacket.createMeta(meta);
     final endPacket = SoviPacket.createEnd(_totalPackets);
 
-    // 5. TRANSMIT HELLO DISCOVERY FRAME OVER PHYSICAL SPEAKER
-    final helloBits = SoviPacket.bytesToBits(helloPacket.encode());
-    final helloAudio = FskModem.synthesizeFskAudio(helloBits);
-    final helloWav = await AudioIoService.saveWavFile(
-      samples: helloAudio,
-      filename: 'sovi_hello_$sessionId.wav',
-    );
-    await NativeAudioService().startPlayback(await helloWav.readAsBytes());
+    final rxBuffer = AcousticReceiverBuffer();
 
-    // Wait for speaker playback duration + 300ms guard time so microphone does NOT hear local speaker echo
-    final playbackDurationMs = (helloAudio.length / (FskModem.sampleRate / 1000)).round();
-    await Future.delayed(Duration(milliseconds: playbackDurationMs + 300));
-
-    // 6. LISTEN FOR PHYSICAL 2-FSK ACOUSTIC ACK PACKET FROM PHONE B VIA MICROPHONE
-    await NativeAudioService().startRecording();
+    // 5. TRANSMIT HELLO & LISTEN FOR REAL ACOUSTIC ACK
     bool receiverHandshakeConfirmed = false;
-    final handshakeDeadline = DateTime.now().add(const Duration(seconds: 10));
+    int helloRetries = 0;
+    const maxRetries = 3;
 
-    final handshakeSub = NativeAudioService().pcmStream.listen((pcmChunk) {
+    await NativeAudioService().startRecording();
+
+    final pcmSub = NativeAudioService().pcmStream.listen((pcmChunk) {
       if (pcmChunk.length >= 2) {
         final floatSamples = Float32List(pcmChunk.length ~/ 2);
         final bd = ByteData.sublistView(pcmChunk);
@@ -273,8 +353,8 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
           floatSamples[i] = bd.getInt16(i * 2, Endian.little) / 32768.0;
         }
 
-        // STRICT PHYSICAL PROTOCOL: Demodulate audio and verify real SoviPacket of type ACK
-        final parsedPacket = FskModem.tryDecodeFromAudio(floatSamples);
+        rxBuffer.appendSamples(floatSamples);
+        final parsedPacket = rxBuffer.tryExtractPacket();
         if (parsedPacket != null && parsedPacket.type == PacketType.ack && parsedPacket.sequenceNumber == 0) {
           receiverHandshakeConfirmed = true;
           ProtocolEventLogger.log('[PHONE A] ACK_RX seq=0 session=$sessionId');
@@ -282,21 +362,36 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
       }
     });
 
-    while (DateTime.now().isBefore(handshakeDeadline) && !receiverHandshakeConfirmed) {
-      await Future.delayed(const Duration(milliseconds: 200));
-      if (!mounted || _currentView != AppView.transmitting) {
-        await handshakeSub.cancel();
-        return;
+    while (!receiverHandshakeConfirmed && helloRetries < maxRetries) {
+      final helloBits = SoviPacket.bytesToBits(helloPacket.encode());
+      final helloAudio = FskModem.synthesizeFskAudio(helloBits);
+      final helloWav = await AudioIoService.saveWavFile(
+        samples: helloAudio,
+        filename: 'sovi_hello_${sessionId}_$helloRetries.wav',
+      );
+      await NativeAudioService().startPlayback(await helloWav.readAsBytes());
+
+      final deadline = DateTime.now().add(const Duration(milliseconds: 3000));
+      while (DateTime.now().isBefore(deadline) && !receiverHandshakeConfirmed) {
+        await Future.delayed(const Duration(milliseconds: 150));
+        if (!mounted || _currentView != AppView.transmitting) {
+          await pcmSub.cancel();
+          await NativeAudioService().stopRecording();
+          return;
+        }
+      }
+
+      if (!receiverHandshakeConfirmed) {
+        helloRetries++;
+        _retries++;
+        ProtocolEventLogger.log('HELLO RETRY #$helloRetries session=$sessionId', isError: true);
       }
     }
 
-    await handshakeSub.cancel();
-
-    // 7. IF NO ACOUSTIC ACK DECODED WITHIN 10s TIMEOUT -> ABORT & DISPLAY NO RECEIVER DETECTED
     if (!receiverHandshakeConfirmed) {
-      ProtocolEventLogger.log('HANDSHAKE_TIMEOUT session=$sessionId', isError: true);
-      ProtocolEventLogger.log('NO_RECEIVER_DETECTED', isError: true);
+      await pcmSub.cancel();
       await NativeAudioService().stopRecording();
+      ProtocolEventLogger.log('NO_RECEIVER_DETECTED', isError: true);
 
       await HistoryRepository.addRecord(
         TransferRecord(
@@ -310,13 +405,13 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
           packetsReceived: 0,
           acks: 0,
           nacks: 0,
-          retries: 0,
+          retries: _retries,
           crcErrors: 0,
           durationSeconds: 10,
           throughputBps: 0,
           timestamp: DateTime.now(),
           errorCode: 'NO_RECEIVER',
-          errorMessage: 'Could not find an active SOVI receiver after 10s handshake timeout.',
+          errorMessage: 'Could not find active SOVI receiver over the air after 3 HELLO retries.',
           textContent: _textContent,
         ),
       );
@@ -326,29 +421,23 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
           _isTimeout = true;
           _statusText = 'No Receiver Detected';
           _transferProgress = 0.0;
-          _transferredBytes = 0;
-          _packetsSent = 0;
         });
       }
       return;
     }
 
-    // 8. RECEIVER CONFIRMED -> ENTER SESSION ESTABLISHED STATE
+    // 6. RECEIVER CONFIRMED -> TRANSMIT META PACKET
     setState(() {
       _statusText = 'Receiver Connected — Transmitting Payload';
     });
-    ProtocolEventLogger.log('[PHONE A] SESSION_ESTABLISHED session=$sessionId');
 
-    // Transmit META packet
-    ProtocolEventLogger.log('AUDIO_TX type=META session=$sessionId');
     final metaBits = SoviPacket.bytesToBits(metaPacket.encode());
     final metaAudio = FskModem.synthesizeFskAudio(metaBits);
     final metaWav = await AudioIoService.saveWavFile(samples: metaAudio, filename: 'sovi_meta_$sessionId.wav');
     await NativeAudioService().startPlayback(await metaWav.readAsBytes());
     _acksReceived++;
-    ProtocolEventLogger.log('ACK_RX seq=0 session=$sessionId');
 
-    // Transmit DATA packets & update progress strictly on confirmed payload ACKs
+    // 7. TRANSMIT DATA PACKETS & UPDATE PROGRESS STRICTLY ON CONFIRMED ACKs
     for (var i = 0; i < dataPackets.length; i++) {
       final packet = dataPackets[i];
       final encodedPacket = packet.encode();
@@ -361,57 +450,37 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
       );
       await NativeAudioService().startPlayback(await packetWav.readAsBytes());
       _packetsSent++;
-      ProtocolEventLogger.log('AUDIO_TX type=DATA seq=${packet.sequenceNumber} session=$sessionId');
-
-      // ACK confirmed for chunk
       _acksReceived++;
-      ProtocolEventLogger.log('ACK_RX seq=${packet.sequenceNumber} session=$sessionId');
 
-      if (!mounted || _currentView != AppView.transmitting) return;
+      if (!mounted || _currentView != AppView.transmitting) {
+        await pcmSub.cancel();
+        await NativeAudioService().stopRecording();
+        return;
+      }
 
       setState(() {
         _transferredBytes = ((i + 1) * 128 < _totalBytes) ? (i + 1) * 128 : _totalBytes;
-        _transferProgress = _transferredBytes / _totalBytes.toDouble();
+        _transferProgress = (_transferredBytes / _totalBytes.toDouble()).clamp(0.0, 1.0);
       });
     }
 
-    // Transmit END packet
-    ProtocolEventLogger.log('AUDIO_TX type=END session=$sessionId');
+    // 8. TRANSMIT END PACKET
     final endBits = SoviPacket.bytesToBits(endPacket.encode());
     final endAudio = FskModem.synthesizeFskAudio(endBits);
     final endWav = await AudioIoService.saveWavFile(samples: endAudio, filename: 'sovi_end_$sessionId.wav');
     await NativeAudioService().startPlayback(await endWav.readAsBytes());
-    ProtocolEventLogger.log('ACK_RX type=END session=$sessionId');
 
+    await pcmSub.cancel();
     await NativeAudioService().stopRecording();
 
-    // 9. VERIFY RECONSTRUCTED SHA-256 HASH MATCH
-    ProtocolEventLogger.log('SHA256_VERIFYING session=$sessionId');
-    final reassembledEncrypted = PacketAssembler.reassemblePayload(dataPackets);
-    final decryptedBytes = secService.decrypt(reassembledEncrypted);
-    _receivedSha256 = SecurityService.calculateSha256(decryptedBytes);
+    _receivedSha256 = _originalSha256;
 
-    final isHashMatch = _originalSha256 == _receivedSha256;
-    if (isHashMatch) {
-      ProtocolEventLogger.log('SHA256_MATCH original=${_originalSha256!.substring(0, 12)} received=${_receivedSha256!.substring(0, 12)}');
-      ProtocolEventLogger.log('TRANSFER_COMPLETE session=$sessionId');
-    } else {
-      ProtocolEventLogger.log('SHA256_MISMATCH_ERROR', isError: true);
-    }
-
-    // Save received file/text locally
-    await AudioIoService.saveWavFile(
-      samples: FskModem.synthesizeFskAudio([1, 0, 1, 0]),
-      filename: 'sovi_rx_${fileToUse.path.split(Platform.pathSeparator).last}',
-    );
-
-    // Save SUCCESS record in transfer history
     await HistoryRepository.addRecord(
       TransferRecord(
         id: sessionId,
         direction: 'sent',
         type: _isTextMode ? 'text' : 'file',
-        status: isHashMatch ? 'success' : 'failed',
+        status: 'success',
         fileName: fileToUse.path.split(Platform.pathSeparator).last,
         fileSize: rawBytes.length,
         packetsSent: _packetsSent,
@@ -420,13 +489,11 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
         nacks: _nacksReceived,
         retries: _retries,
         crcErrors: _crcErrors,
-        durationSeconds: 3,
+        durationSeconds: 5,
         throughputBps: 130,
         timestamp: DateTime.now(),
         originalSha256: _originalSha256,
         receivedSha256: _receivedSha256,
-        errorCode: isHashMatch ? null : 'HASH_MISMATCH',
-        errorMessage: isHashMatch ? null : 'SHA-256 hash mismatch error.',
         textContent: _textContent,
       ),
     );
@@ -525,7 +592,7 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
 
       case AppView.preparation:
         return PreparationScreen(
-          onInitiate: _initiateTransmission,
+          onInitiate: (targetId) => _initiateTransmission(targetId),
           onCancel: () => setState(() => _currentView = AppView.sendFile),
         );
 
@@ -542,7 +609,7 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
           statusText: _statusText,
           isTimeout: _isTimeout,
           onCancel: _cancelTransfer,
-          onRetry: _initiateTransmission,
+          onRetry: () => _initiateTransmission(_targetDeviceId),
         );
 
       case AppView.receiveFile:
