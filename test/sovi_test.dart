@@ -10,7 +10,9 @@ import 'package:sovi/services/device/device_info_service.dart';
 import 'package:sovi/services/acoustic/receiver_discovery_engine.dart';
 
 
-//@Bç
+
+
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
