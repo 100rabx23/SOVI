@@ -5,6 +5,10 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+
+
+//754675
+
 android {
     namespace = "com.sovi.sovi"
     compileSdk = flutter.compileSdkVersion
