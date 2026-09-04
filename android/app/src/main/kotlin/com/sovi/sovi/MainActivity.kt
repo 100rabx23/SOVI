@@ -1,5 +1,7 @@
 package com.sovi.sovi
 
+
+
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioRecord
@@ -14,6 +16,10 @@ import io.flutter.plugin.common.MethodChannel
 import kotlin.concurrent.thread
 import kotlin.math.log10
 import kotlin.math.sqrt
+
+
+
+#123123122
 
 class MainActivity : FlutterActivity() {
     private val METHOD_CHANNEL = "com.sovi.app/audio"
