@@ -7,7 +7,6 @@ plugins {
 
 
 
-//754675
 
 android {
     namespace = "com.sovi.sovi"
