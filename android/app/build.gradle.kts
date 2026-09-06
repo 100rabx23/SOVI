@@ -9,11 +9,6 @@ plugins {
 
 
 
-
-///11223344
-
-
-
 android {
     namespace = "com.sovi.sovi"
     compileSdk = flutter.compileSdkVersion
