@@ -10,10 +10,6 @@ Sound system
 
 
 
-. .
-
-
-
 
 . .
 
