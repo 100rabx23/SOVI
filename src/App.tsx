@@ -1,4 +1,4 @@
-mport React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { LandingPage } from './pages/LandingPage';
 import { SendPage } from './pages/SendPage';
 import { ReceivePage } from './pages/ReceivePage';
