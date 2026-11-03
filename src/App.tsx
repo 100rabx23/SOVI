@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect } from 'react';
 import { LandingPage } from './pages/LandingPage';
 import { SendPage } from './pages/SendPage';
